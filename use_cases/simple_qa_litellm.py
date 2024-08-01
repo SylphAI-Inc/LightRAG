@@ -3,7 +3,7 @@
 
 from lightrag.core.generator import Generator
 from lightrag.core.component import Component
-from lightrag.components.model_client import LiteClient
+from lightrag.components.model_client import LiteLLMClient
 from lightrag.utils import setup_env
 
 # Setup environment variables (e.g., API keys). Remove this in production.
@@ -16,9 +16,7 @@ class SimpleQA(Component):
         # Initialize the generator with a LiteClient using the deepseek-chat model
         # Other client options include OpenAIClient, AnthropicClient, GoogleGenAIClient
         self.generator = Generator(
-            model_client=LiteClient(
-                model="together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
-            ),
+            model_client=LiteLLMClient(),
             model_kwargs={
                 "model": "together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
             },  # Define which parameters are trainable

@@ -1,18 +1,18 @@
 import unittest
 from unittest.mock import Mock
 from lightrag.core.types import ModelType
-from lightrag.components.model_client.lite_client import LiteClient
+from lightrag.components.model_client import LiteLLMClient
 
 
 from lightrag.utils import setup_env  # ensure you have .env with OPENAI_API_KEY
 
- # need to setup env
+# need to setup env
 
 
 class test_lite_model(unittest.TestCase):
 
     def test_lite_client(self):
-        litellm_client = Mock(spec=LiteClient(model="groq/llama3-70b-8192"))
+        litellm_client = Mock(spec=LiteLLMClient())
         print("testing litellm client")
         kwargs = {
             # model already defined in the init , add additionnal argument if needed
@@ -39,7 +39,7 @@ class test_lite_model(unittest.TestCase):
         assert output == {"message": "Hello"}
 
     def test_lite_client_embeddings(self):
-        litellm_client = Mock(spec=LiteClient(model="text-embedding-ada-002-v2"))
+        litellm_client = Mock(spec=LiteLLMClient(model="text-embedding-ada-002-v2"))
         print("testing litellm client")
         kwargs = {
             # model already defined in the init , add additionnal argument if needed
