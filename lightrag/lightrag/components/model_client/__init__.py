@@ -79,7 +79,7 @@ __all__ = [
     "GroqAPIClient",
     "OpenAIClient",
     "GoogleGenAIClient",
-    "LiteClient",
+    "LiteLLMClient",
 ]
 
 for name in __all__:
