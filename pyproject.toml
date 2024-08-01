@@ -50,6 +50,10 @@ faiss-cpu = "^1.8.0.post1"
 lightrag = { path = "lightrag", develop = true }
 
 
+
+[tool.poetry.group.test.dependencies]
+litellm = "^1.42.8"
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
