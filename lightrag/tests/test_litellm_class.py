@@ -39,10 +39,9 @@ class test_lite_model(unittest.TestCase):
         assert output == {"message": "Hello"}
 
     def test_lite_client_embeddings(self):
-        litellm_client = Mock(spec=LiteLLMClient(model="text-embedding-ada-002-v2"))
+        litellm_client = Mock(spec=LiteLLMClient())
         print("testing litellm client")
         kwargs = {
-            # model already defined in the init , add additionnal argument if needed
             "model": "text-embedding-ada-002-v2",
         }
         api_kwargs = litellm_client.convert_inputs_to_api_kwargs(
