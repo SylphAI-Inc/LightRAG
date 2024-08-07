@@ -98,6 +98,9 @@ class LiteLLMClient(ModelClient):
     ) -> Dict:
         """Convert the Component's standard input and model_kwargs into API-specific format"""
         final_model_kwargs = model_kwargs.copy()
+        if "model" not in model_kwargs:
+            raise ValueError("model must be specified")
+        self._validate_environment(model_kwargs["model"])
         if model_type == ModelType.EMBEDDER:
             if isinstance(input, str):
                 input = [input]
@@ -135,8 +138,7 @@ class LiteLLMClient(ModelClient):
         max_time=5,
     )
     def call(self, api_kwargs: Dict = {}, model_type: ModelType = ModelType.UNDEFINED):
-        if "model" not in api_kwargs:
-            raise ValueError("model must be specified")
+        
         self._validate_environment(api_kwargs["model"])
         log.info(f"api_kwargs: {api_kwargs}")
         if not self.sync_client:
@@ -159,11 +161,11 @@ class LiteLLMClient(ModelClient):
         self, api_kwargs: Dict = {}, model_type: ModelType = ModelType.UNDEFINED
     ):
         """Asynchronous call to the API"""
-        if "model" not in api_kwargs:
-            raise ValueError("model must be specified")
+        # if "model" not in api_kwargs or api_kwargs['model'] == "":
+        #     raise ValueError("model must be specified")
+        # self._validate_environment(api_kwargs["model"])
         self._validate_environment(api_kwargs["model"])
         log.info(f"api_kwargs: {api_kwargs}")
-
         if self.async_client is None:
             self.async_client = self.init_async_client()
         if model_type == ModelType.EMBEDDER:
