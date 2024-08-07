@@ -1,5 +1,7 @@
 r"""We let users install the required SDKs conditionally for our integrated model providers."""
 
+# from lite_client import LiteClient
+
 from lightrag.utils.registry import EntityMapping
 from lightrag.utils.lazy_import import (
     LazyImport,
@@ -40,9 +42,14 @@ OpenAIClient = LazyImport(
     "lightrag.components.model_client.openai_client.OpenAIClient",
     OptionalPackages.OPENAI,
 )
+
 GoogleGenAIClient = LazyImport(
     "lightrag.components.model_client.google_client.GoogleGenAIClient",
     OptionalPackages.GOOGLE_GENERATIVEAI,
+)
+LiteLLMClient = LazyImport(
+    "lightrag.components.model_client.litellm_client.LiteLLMClient",
+    OptionalPackages.LITELLM,
 )
 OllamaClient = LazyImport(
     "lightrag.components.model_client.ollama_client.OllamaClient",
@@ -72,6 +79,7 @@ __all__ = [
     "GroqAPIClient",
     "OpenAIClient",
     "GoogleGenAIClient",
+    "LiteLLMClient",
 ]
 
 for name in __all__:

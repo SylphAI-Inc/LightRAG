@@ -14,6 +14,7 @@ lightrag = { path = "lightrag", develop = true }
 openai = "^1.34.0"
 # lightrag = {path = "lightrag/dist/lightrag-0.0.0a11-py3-none-any.whl"}
 # lightrag = "^0.0.0a13"
+litellm = "^1.42.3"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -48,6 +49,10 @@ google-generativeai = "^0.7.1"
 faiss-cpu = "^1.8.0.post1"
 lightrag = { path = "lightrag", develop = true }
 
+
+
+[tool.poetry.group.test.dependencies]
+litellm = "^1.42.8"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
