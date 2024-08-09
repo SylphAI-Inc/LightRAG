@@ -43,3 +43,8 @@ storage/
 /*.svg
 /*.csv
 index.faiss
+*.json
+*.svg
+cache_datasets/
+ckpt/
+hotpot_qa*/

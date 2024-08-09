@@ -1,16 +1,8 @@
-r"""
-The base class for all retrievers who in particular retrieve documents from a given database.
-"""
+r"""The base class for all retrievers who in particular retrieve documents from a given database."""
 
-from typing import (
-    List,
-    Optional,
-    Generic,
-    Any,
-    Callable,
-)
+from typing import List, Optional, Generic, Any, Callable, Union, TYPE_CHECKING
+import logging
 
-from lightrag.core.component import Component
 from lightrag.core.types import (
     RetrieverQueriesType,
     RetrieverQueryType,
@@ -18,9 +10,17 @@ from lightrag.core.types import (
     RetrieverDocumentsType,
     RetrieverOutputType,
 )
+from lightrag.core.grad_component import GradComponent
+
+if TYPE_CHECKING:
+    from lightrag.core.generator import Generator
+from lightrag.optim.parameter import Parameter, ParameterType
+from lightrag.optim.function import BackwardContext
+
+log = logging.getLogger(__name__)
 
 
-class Retriever(Component, Generic[RetrieverDocumentType, RetrieverQueryType]):
+class Retriever(GradComponent, Generic[RetrieverDocumentType, RetrieverQueryType]):
     __doc__ = r"""The base class for all retrievers.
 
     Retriever will manage its own index and retrieve in format of RetrieverOutput
@@ -91,3 +91,75 @@ class Retriever(Component, Generic[RetrieverDocumentType, RetrieverQueryType]):
         **kwargs,
     ) -> RetrieverOutputType:
         raise NotImplementedError("Async retrieve is not implemented")
+
+    def forward(
+        self,
+        input: Union[RetrieverQueriesType, Parameter],
+        top_k: Optional[
+            int
+        ] = None,  # TODO: top_k can be trained in the future if its formulated as a parameter
+        id: Optional[str] = None,
+        **kwargs,
+    ) -> Parameter:
+        r"""Training mode which will deal with parameter as predecessors"""
+        input_args = {"input": input, "top_k": top_k, "id": id}
+        predecessors = [p for p in [input, top_k, id] if isinstance(p, Parameter)]
+
+        input_args_values = {}
+        for k, v in input_args.items():
+            if isinstance(v, Parameter):
+                input_args_values[k] = v.data
+            else:
+                input_args_values[k] = v
+
+        retriever_reponse = self.call(**input_args_values)
+
+        response = Parameter(
+            data=retriever_reponse,
+            alias=self.name + "_output",
+            role_desc="Retriever response",
+            predecessors=predecessors,
+            input_args=input_args,
+        )
+        response.set_grad_fn(
+            BackwardContext(
+                backward_fn=self.backward,
+                response=response,
+                id=id,
+            )
+        )
+        return response
+
+    def backward(
+        self,
+        response: Parameter,
+        id: Optional[str] = None,
+        backward_engine: Optional["Generator"] = None,
+    ):
+        r"""Backward the response to pass the score to predecessors"""
+        log.info(f"Retriever backward: {response}")
+        children_params = response.predecessors
+        if not self.tracing:
+            return
+        # backward score to the demo parameter
+        for pred in children_params:
+            if pred.requires_opt:
+                # pred._score = float(response._score)
+                pred.set_score(response._score)
+                log.debug(
+                    f"backpropagate the score {response._score} to {pred.alias}, is_teacher: {self.teacher_mode}"
+                )
+                if pred.param_type == ParameterType.DEMOS:
+                    # Accumulate the score to the demo
+                    pred.add_score_to_trace(
+                        trace_id=id, score=response._score, is_teacher=self.teacher_mode
+                    )
+                    log.debug(f"Pred: {pred.alias}, traces: {pred._traces}")
+
+    # def __call__(self, *args, **kwargs) -> Union[RetrieverOutputType, Any]:
+    #     if self.training:
+    #         log.debug("Training mode")
+    #         return self.forward(*args, **kwargs)
+    #     else:
+    #         log.debug("Inference mode")
+    #         return self.call(*args, **kwargs)

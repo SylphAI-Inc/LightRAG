@@ -11,15 +11,12 @@ from typing import (
     Callable,
     Generator,
     Union,
+    Literal,
 )
+import re
 
 import logging
 import backoff
-
-
-from lightrag.core.model_client import ModelClient
-from lightrag.core.types import ModelType, EmbedderOutput, TokenLogProb
-from lightrag.components.model_client.utils import parse_embedding_response
 
 # optional import
 from lightrag.utils.lazy_import import safe_import, OptionalPackages
@@ -35,9 +32,21 @@ from openai import (
     UnprocessableEntityError,
     BadRequestError,
 )
-from openai.types import Completion, CreateEmbeddingResponse
+from openai.types import (
+    Completion,
+    CreateEmbeddingResponse,
+)
 from openai.types.chat import ChatCompletionChunk, ChatCompletion
 
+from lightrag.core.model_client import ModelClient
+from lightrag.core.types import (
+    ModelType,
+    EmbedderOutput,
+    TokenLogProb,
+    CompletionUsage,
+    GeneratorOutput,
+)
+from lightrag.components.model_client.utils import parse_embedding_response
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -48,6 +57,10 @@ def get_first_message_content(completion: ChatCompletion) -> str:
     r"""When we only need the content of the first message.
     It is the default parser for chat completion."""
     return completion.choices[0].message.content
+
+
+# def _get_chat_completion_usage(completion: ChatCompletion) -> OpenAICompletionUsage:
+#     return completion.usage
 
 
 def parse_stream_response(completion: ChatCompletionChunk) -> str:
@@ -112,6 +125,7 @@ class OpenAIClient(ModelClient):
         self,
         api_key: Optional[str] = None,
         chat_completion_parser: Callable[[Completion], Any] = None,
+        input_type: Literal["text", "messages"] = "text",
     ):
         r"""It is recommended to set the OPENAI_API_KEY environment variable instead of passing it as an argument.
 
@@ -125,6 +139,7 @@ class OpenAIClient(ModelClient):
         self.chat_completion_parser = (
             chat_completion_parser or get_first_message_content
         )
+        self._input_type = input_type
 
     def init_sync_client(self):
         api_key = self._api_key or os.getenv("OPENAI_API_KEY")
@@ -138,13 +153,49 @@ class OpenAIClient(ModelClient):
             raise ValueError("Environment variable OPENAI_API_KEY must be set")
         return AsyncOpenAI(api_key=api_key)
 
+    # def _parse_chat_completion(self, completion: ChatCompletion) -> "GeneratorOutput":
+    #     # TODO: raw output it is better to save the whole completion as a source of truth instead of just the message
+    #     try:
+    #         data = self.chat_completion_parser(completion)
+    #         usage = self.track_completion_usage(completion)
+    #         return GeneratorOutput(
+    #             data=data, error=None, raw_response=str(data), usage=usage
+    #         )
+    #     except Exception as e:
+    #         log.error(f"Error parsing the completion: {e}")
+    #         return GeneratorOutput(data=None, error=str(e), raw_response=completion)
+
     def parse_chat_completion(
         self,
         completion: Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]],
-    ) -> Any:
-        """Parse the completion to a str."""
+    ) -> "GeneratorOutput":
+        """Parse the completion, including both streaming and non-streaming completion"""
         log.debug(f"completion: {completion}, parser: {self.chat_completion_parser}")
-        return self.chat_completion_parser(completion)
+        try:
+            data = self.chat_completion_parser(completion)
+            usage = self.track_completion_usage(completion)
+            return GeneratorOutput(
+                data=data, error=None, raw_response=str(data), usage=usage
+            )
+        except Exception as e:
+            log.error(f"Error parsing the completion: {e}")
+            return GeneratorOutput(data=None, error=str(e), raw_response=completion)
+
+    def track_completion_usage(
+        self,
+        completion: Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]],
+    ) -> CompletionUsage:
+        if isinstance(completion, ChatCompletion):
+            usage: CompletionUsage = CompletionUsage(
+                completion_tokens=completion.usage.completion_tokens,
+                prompt_tokens=completion.usage.prompt_tokens,
+                total_tokens=completion.usage.total_tokens,
+            )
+            return usage
+        else:
+            raise NotImplementedError(
+                "streaming completion usage tracking is not implemented"
+            )
 
     def parse_embedding_response(
         self, response: CreateEmbeddingResponse
@@ -169,6 +220,7 @@ class OpenAIClient(ModelClient):
         Specify the API input type and output api_kwargs that will be used in _call and _acall methods.
         Convert the Component's standard input, and system_input(chat model) and model_kwargs into API-specific format
         """
+
         final_model_kwargs = model_kwargs.copy()
         if model_type == ModelType.EMBEDDER:
             if isinstance(input, str):
@@ -180,7 +232,26 @@ class OpenAIClient(ModelClient):
         elif model_type == ModelType.LLM:
             # convert input to messages
             messages: List[Dict[str, str]] = []
-            if input is not None and input != "":
+            # if input is not None and input != "":
+            #     messages.append({"role": "system", "content": input})
+            if self._input_type == "messages":
+                pattern = r"<SYS>(.*?)</SYS><USER>(.*?)</USER>"
+                # Compile the regular expression
+                regex = re.compile(pattern)
+                # Match the pattern
+                match = regex.search(input)
+                system_prompt, input_str = None, None
+
+                if match:
+                    system_prompt = match.group(1)
+                    input_str = match.group(2)
+
+                else:
+                    print("No match found.")
+                if system_prompt and input_str:
+                    messages.append({"role": "system", "content": system_prompt})
+                    messages.append({"role": "user", "content": input_str})
+            if len(messages) == 0:
                 messages.append({"role": "system", "content": input})
             final_model_kwargs["messages"] = messages
         else:

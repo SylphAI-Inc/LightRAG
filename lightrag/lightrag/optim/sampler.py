@@ -7,6 +7,7 @@ Our sampler directly impact the few-shot examples and can lead to different perf
 
 import random
 from dataclasses import dataclass
+import logging
 
 from typing import (
     List,
@@ -23,6 +24,7 @@ import math
 
 
 T_co = TypeVar("T_co", covariant=True)
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -37,13 +39,19 @@ class Sample(Generic[T_co]):
 
 
 class Sampler(Generic[T_co]):
+    dataset: Sequence[object] = None
+
     def __init__(self, *args, **kwargs) -> None:
         pass
+
+    def set_dataset(self, dataset: Sequence[T_co]):
+        r"""Set the dataset for the sampler"""
+        self.dataset = dataset
 
     def random_replace(self, *args, **kwargs):
         r"""Randomly replace some samples
 
-        Recomnend to have two arguments: shots and samples
+        You can have two arguments, e.g., shots and samples, or shots, samples, and replace.
         """
         pass
 
@@ -65,21 +73,33 @@ class RandomSampler(Sampler, Generic[T_co]):
     dataset: Union[tuple, list]
 
     def __init__(
-        self, dataset: Sequence[T_co], default_num_shots: Optional[int] = None
+        self,
+        dataset: Optional[Sequence[T_co]] = None,
+        default_num_shots: Optional[int] = None,
     ):
         super().__init__()
-        self.dataset: List[Sample[T_co]] = [
-            Sample[T_co](index=i, data=x) for i, x in enumerate(dataset)
-        ]
-
+        self.set_dataset(dataset)
         self.default_num_shots = default_num_shots
+        self._id_to_index = (
+            {item.id: i for i, item in enumerate(dataset)}
+            if dataset is not None
+            else {}
+        )
+        # to exclude samples in augmented demos
+
+    def set_dataset(self, dataset: Sequence[T_co]):
+        # Sample will keep the index of the sample in the dataset
+        self.dataset = (
+            [Sample[T_co](index=i, data=x) for i, x in enumerate(dataset)]
+            if dataset is not None
+            else None
+        )
 
     def random_replace(
         self,
         shots: int,
         samples: List[Sample[T_co]],
         replace: Optional[bool] = False,
-        weights_per_class: Optional[List[float]] = None,
     ) -> List[Sample[T_co]]:
         r"""
         Randomly replace num of shots in the samples.
@@ -128,6 +148,7 @@ class RandomSampler(Sampler, Generic[T_co]):
         return self.random_sample(num_shots, replace)
 
 
+# TODO: this is only for classification tasks, will need to be further tested
 class ClassSampler(Sampler, Generic[T_co]):
     r"""Sample from the dataset based on the class labels.
 

@@ -1,4 +1,5 @@
-"""Component is to LLM task pipelines what nn.Module is to PyTorch models."""
+"""Base building block for building LLM task pipelines.
+It handles states recursively, such as training, components, parameters recursively along with serialization and deserialization."""
 
 from collections import OrderedDict, namedtuple
 from typing import (
@@ -13,14 +14,15 @@ from typing import (
     Mapping,
     TypeVar,
     Type,
+    TYPE_CHECKING,
 )
 
 import logging
 import pickle
 import inspect
 
-
-from lightrag.core.parameter import Parameter
+if TYPE_CHECKING:
+    from lightrag.optim.parameter import Parameter
 from lightrag.utils.serialization import default
 from lightrag.utils.config import new_component
 
@@ -68,6 +70,12 @@ class Component:
 
     Components can also contain other Components, allowing to nest them in
     a tree structure. You can assign the subcomponents as regular attributes::
+
+    Component supports three modes:
+    - Training mode: ``train()`` When turned on, any component __call__ will use forward and backward for in-context training.
+      When turned off, the __call__ should only use `call` and `acall` for inference.
+    - Tracing mode: ``trace()`` When turned on, the component will accumulate input, output, and backpropagate the eval score to Parameter of Demo type.
+    - Teacher mode: ``use_teacher()`` When turned on, the component will accumulates the demos to the `_trace`s, otherwise, it will be saved in `_student_traces`.
 
     Example:
 
@@ -124,8 +132,13 @@ class Component:
     # _execution_graph: List[str] = []  # This will store the graph of execution.
     # _graph = nx.DiGraph()
     # _last_called = None  # Tracks the last component called
-    _parameters: Dict[str, Optional[Parameter]]
+    _parameters: Dict[str, Optional["Parameter"]]
     training: bool
+    teacher_mode: bool = False
+    tracing: bool = False
+    name: str = (
+        "Component"  # name will help with GradComponent output naming as "{name}_output"
+    )
 
     # def _generate_unique_name(self):
     #     # Generate a unique identifier that includes the class name
@@ -135,8 +148,29 @@ class Component:
         super().__setattr__("_components", OrderedDict())
         super().__setattr__("_parameters", OrderedDict())
         super().__setattr__("training", False)
+        super().__setattr__("teacher_mode", False)
+        super().__setattr__("tracing", False)
+        super().__setattr__("name", self.__class__.__name__)
         # only for tracking the init args
         super().__setattr__("_init_args", self._get_init_args(*args, **kwargs))
+
+    def use_teacher(self, mode: bool = True):
+        r"""Sets the component in teacher mode."""
+        if not isinstance(mode, bool):
+            raise ValueError("mode should be a boolean")
+        self.teacher_mode = mode
+        for component in self.children():
+            component.use_teacher(mode)
+        return self
+
+    def trace(self, mode: bool = True):
+        r"""Sets the component in tracing mode.This signal will be used in forward and backward to accumulate input and output."""
+        if not isinstance(mode, bool):
+            raise ValueError("mode should be a boolean")
+        self.tracing = mode
+        for component in self.children():
+            component.trace(mode)
+        return self
 
     def train(self, mode: bool = True):
         r"""Sets the component in training mode."""
@@ -333,7 +367,11 @@ class Component:
         with open(filepath, "rb") as file:
             return pickle.load(file)
 
-    def register_parameter(self, name: str, param: Optional[Parameter] = None) -> None:
+    def register_parameter(
+        self, name: str, param: Optional["Parameter"] = None
+    ) -> None:
+        from lightrag.optim.parameter import Parameter
+
         r"""Add a parameter to the component.
 
         The parameter can be accessed as an attribute using given name.
@@ -363,7 +401,7 @@ class Component:
         else:
             self._parameters[name] = param
 
-    def parameters(self, recursive: bool = True) -> Iterable[Parameter]:
+    def parameters(self, recursive: bool = True) -> Iterable["Parameter"]:
         r"""Returns an iterator over module parameters.
 
         Args:
@@ -420,7 +458,7 @@ class Component:
 
     def named_parameters(
         self, prefix: str = "", recursive: bool = True, remove_duplicate: bool = True
-    ) -> Iterable[Tuple[str, Parameter]]:
+    ) -> Iterable[Tuple[str, "Parameter"]]:
         r"""Returns an iterator over componenet parameters, yielding both the name of the parameter as well as the parameter itself.
 
         Args:
@@ -562,7 +600,7 @@ class Component:
         prefix: str = "",
         remove_duplicate: bool = True,
     ):
-        r"""Return an iterator over all components in the pipeline, yielding both the name of the component as well as the component itself.
+        r"""Return an iterator over all components in the pipeline, yielding both the name of the component as well as the component itself as a tuple.
 
         This can be used to represent the state of the component in a dictionary format.
         Args:
@@ -765,6 +803,8 @@ class Component:
     #     return self
 
     def __setattr__(self, name: str, value: Any) -> None:
+        from lightrag.optim.parameter import Parameter
+
         def remove_from(*dicts_or_sets):
             for d in dicts_or_sets:
                 if name in d:
@@ -932,7 +972,6 @@ def fun_to_component(fun) -> FunComponent:
     class_name = (
         "".join(part.capitalize() for part in fun.__name__.split("_")) + "Component"
     )
-    print(f"Class name: {class_name}, function name: {fun.__name__}")
     # register the function
     EntityMapping.register(fun.__name__, fun)
     # Define a new component class dynamically

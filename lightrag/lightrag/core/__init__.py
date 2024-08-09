@@ -1,12 +1,14 @@
 from .base_data_class import DataClass, required_field, DataClassFormatType
+
 from .component import Component, FunComponent, fun_to_component
 from .container import Sequential
 from .db import LocalDB
 from .default_prompt_template import DEFAULT_LIGHTRAG_SYSTEM_PROMPT
 from .embedder import Embedder, BatchEmbedder
-from .generator import Generator
+from .generator import Generator, BackwardEngine
 from .model_client import ModelClient
-from .parameter import Parameter
+
+# from .parameter import Parameter
 from .prompt_builder import Prompt
 
 from .retriever import Retriever
@@ -54,9 +56,10 @@ __all__ = [
     "DataClassFormatType",
     "required_field",
     "Generator",
+    "BackwardEngine",
     "Prompt",
     "DEFAULT_LIGHTRAG_SYSTEM_PROMPT",
-    "Parameter",
+    # "Parameter",
     "required_field",
     "ModelClient",
     "Embedder",

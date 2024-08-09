@@ -96,9 +96,13 @@ class TestTransformerModelClient(unittest.TestCase):
     #     self.assertEqual(type(output), tuple)
 
     # def test_transformer_llm_response(self):
+    #     from lightrag.components.model_client.transformers_client import TransformerLLM
+
     #     """Test the TransformerLLM model with zephyr-7b-beta for generating a response."""
     #     transformer_llm_model = "HuggingFaceH4/zephyr-7b-beta"
-    #     transformer_llm_model_component = TransformerLLM(model_name=transformer_llm_model)
+    #     transformer_llm_model_component = TransformerLLM(
+    #         model_name=transformer_llm_model
+    #     )
 
     #     # Define a sample input
     #     input_text = "Hello, what's the weather today?"
